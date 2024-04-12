@@ -15,15 +15,26 @@ import {
   DialogDescription,
   DialogFooter,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { DialogHeader } from "next/dist/client/components/react-dev-overlay/internal/components/Dialog";
 import { Label } from "@/components/ui/label";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  createToken,
+  deleteToken,
+  getTokenList,
+} from "@/app/setting/token/actions";
+import { LoadingButton } from "@/components/ui/loading-button";
+import { toast } from "sonner";
 
 export default function Page() {
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
+  const [openNewModal, setOpenNewModal] = useState(false);
+  const [newTokenDescription, setNewTokenDescription] = useState("");
+  const [currentDeleteId, setCurrentDeleteId] = useState<number>();
 
-  const openDelete = useCallback(() => {
+  const openDelete = useCallback((id: number) => {
+    setCurrentDeleteId(id);
     setOpenDeleteModal(true);
   }, []);
 
@@ -43,14 +54,28 @@ export default function Page() {
       },
       {
         header: "Action",
+        accessorKey: "id",
         size: 50,
-        cell() {
+        cell(cell) {
+          const { id, token } = cell.row.original;
           return (
             <>
-              <Button variant={"ghost"} size="sm">
+              <Button
+                variant={"ghost"}
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard
+                    .writeText(token)
+                    .then(() => toast("copied token successfully."));
+                }}
+              >
                 <Copy className={"h-4 w-4"} />
               </Button>
-              <Button variant={"ghost"} size={"sm"} onClick={openDelete}>
+              <Button
+                variant={"ghost"}
+                size={"sm"}
+                onClick={() => openDelete(id)}
+              >
                 <Trash className={"h-4 w-4 text-destructive"} />
               </Button>
             </>
@@ -59,6 +84,31 @@ export default function Page() {
       },
     ] satisfies ColumnDef<Omit<Token, "userId">>[];
   }, [openDelete]);
+
+  const listQuery = useQuery({
+    queryKey: ["tokenList"],
+    queryFn: () => getTokenList().then((res) => res.data),
+    initialData: [],
+  });
+
+  const createTokenMutation = useMutation({
+    mutationFn: async () => {
+      await createToken({ description: newTokenDescription });
+      setOpenNewModal(false);
+      return listQuery.refetch();
+    },
+  });
+
+  const deleteTokenMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentDeleteId) {
+        return;
+      }
+      await deleteToken({ id: currentDeleteId });
+      setOpenDeleteModal(false);
+      return listQuery.refetch();
+    },
+  });
 
   return (
     <>
@@ -69,40 +119,44 @@ export default function Page() {
         <CardContent>
           <div className={"pb-2 flex flex-row"}>
             <Input className={"mr-4 max-w-64"} placeholder={"filter"} />
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button>New</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>New Token</DialogTitle>
-                </DialogHeader>
-                <div>
-                  <Label>Description</Label>
-                  <Input />
-                </div>
-                <DialogFooter>
-                  <DialogClose>
-                    <Button variant={"outline"}>Close</Button>
-                  </DialogClose>
-                  <Button>Save</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => setOpenNewModal(true)}>New</Button>
           </div>
-          <DataTable
-            columns={columns}
-            data={[
-              {
-                id: 12,
-                description: "Description",
-                createdAt: new Date(),
-                expireAt: new Date(),
-              },
-            ]}
-          />
+          <DataTable columns={columns} data={listQuery.data} />
         </CardContent>
       </Card>
+      <Dialog
+        open={openNewModal}
+        onOpenChange={(open) => setOpenNewModal(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Token</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label>Description</Label>
+            <Input
+              value={newTokenDescription}
+              onChange={(e) => setNewTokenDescription(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose>
+              <LoadingButton
+                variant={"outline"}
+                loading={createTokenMutation.isPending}
+              >
+                Close
+              </LoadingButton>
+            </DialogClose>
+            <LoadingButton
+              loading={createTokenMutation.isPending}
+              onClick={() => createTokenMutation.mutate()}
+            >
+              Save
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={openDeleteModal}
         onOpenChange={(open) => setOpenDeleteModal(open)}
@@ -112,9 +166,19 @@ export default function Page() {
           <DialogDescription>where to delete the item?</DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant={"outline"}>Close</Button>
+              <LoadingButton
+                variant={"outline"}
+                loading={deleteTokenMutation.isPending}
+              >
+                Close
+              </LoadingButton>
             </DialogClose>
-            <Button>Delete</Button>
+            <LoadingButton
+              loading={deleteTokenMutation.isPending}
+              onClick={() => deleteTokenMutation.mutate()}
+            >
+              Delete
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

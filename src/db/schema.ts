@@ -9,6 +9,7 @@ import {
   timestamp,
   primaryKey,
   varchar,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccount } from "@auth/core/adapters";
 
@@ -89,15 +90,24 @@ export const filter = pgTable("filter", {
   userId: text("user_id").references(() => user.id),
 });
 
-export const token = pgTable("token", {
-  id: serial("id").primaryKey(),
-  userId: text("user_id")
-    .references(() => user.id)
-    .notNull(),
-  expireAt: date("expire_at", { mode: "date" }).notNull(),
-  description: text("description").notNull().notNull(),
-  createdAt: date("created_at", { mode: "date" }).notNull(),
-});
+export const token = pgTable(
+  "token",
+  {
+    id: serial("id").primaryKey(),
+    token: text("token").unique().notNull(),
+    userId: text("user_id")
+      .references(() => user.id)
+      .notNull(),
+    expireAt: date("expire_at", { mode: "date" }),
+    description: text("description").notNull().notNull(),
+    createdAt: date("created_at", { mode: "date" }).notNull(),
+  },
+  (table) => {
+    return {
+      tokenIdx: uniqueIndex("token_index").on(table.token),
+    };
+  },
+);
 
 export type User = typeof user.$inferSelect;
 export type OAuth = typeof oauth.$inferSelect;
